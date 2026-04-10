@@ -38,6 +38,9 @@ export const config = {
   // true = ao ignorar vaga, loga tamanho do texto e trecho (diagnóstico de filtro/painel vazio)
   debugJobFilter: false,
 
+  // true = logs ▸ [PASSO] no terminal (login, vagas, card, Easy Apply, pausa, convites, ciclo). false = menos ruído
+  stepByStepLog: true,
+
   // true = ignora vaga que não cite sênior (título/descrição)
   seniorOnly: false,
   seniorKeywords: ['senior', 'sênior', 'sr.', 'staff', 'principal engineer', 'lead developer', 'tech lead'],
@@ -66,13 +69,24 @@ export const config = {
   // Antes de clicar em Easy Apply, rola a descrição (recomendado). false = vai direto ao botão
   simulateReadBeforeApply: true,
 
-  // Pausa após cada candidatura enviada com sucesso (ms)
+  // Pausa longa (convites + espera) após um BLOCO de candidaturas — tamanho do bloco aleatório:
+  applicationsBeforePauseMin: 2,
+  applicationsBeforePauseMax: 6,
+  // Ao acabar a lista de vagas do ciclo, ainda há candidaturas sem pausa longa depois → faz a pausa uma vez
+  flushPendingApplyPauseOnJobsEnd: true,
+
+  // Duração da pausa longa após cada bloco (ms)
   afterApplyDelayMinMs: 90_000,
   afterApplyDelayMaxMs: 240_000,
 
-  // Na pausa pós-candidatura: buscar recrutadores e conectar (até o tempo da pausa acabar)
+  // Na pausa pós-candidatura: busca de pessoas + convites (até o tempo da pausa acabar).
+  // Independente de doConnect — o lote após N candidaturas usa doConnect só para feed+recrutadores “grandes”.
   recruitersDuringApplyPause: true,
-  pauseAfterApplyRecruiterConnections: 4, // máx. conexões por ida à busca de pessoas nessa pausa
+  pauseAfterApplyRecruiterConnections: 6, // máx. convites por ida à busca de pessoas nessa pausa
+  // Se sobrar menos que isso (ms), só espera — não abre outra busca (evita começar e não terminar)
+  applyPauseMinRemainingMsForConnect: 10_000,
+  // false = na pausa pós-candidatura, busca sem “contratando agora” (mais gente com botão Conectar; pode ser menos alvo)
+  recruiterActivelyHiringDuringApplyPause: true,
 
   // Busca de pessoas: mistura o termo de vagas atual (searchKeywordsList/rotação) com cada item de recruiterSearchTerms
   recruiterSearchAlignWithJobKeywords: true,
@@ -103,17 +117,38 @@ export const config = {
 
   doApply: true,    // candidaturas Easy Apply
   doFeed: true,     // curtir posts no feed
-  doConnect: true,  // conexões com recrutadores tech
+  doConnect: true,  // lote pós-N candidaturas: feed + convites (recrutadores + devs)
   debugConnect: false, // true = screenshot quando não encontra botão Conectar
   feedLikesCount: 5,
   politicsBlacklist: ['política', 'eleição', 'presidente', 'voto', 'partido', 'candidato'],
-  // Sufixos após o termo de vagas (ex.: "node senior tech recruiter"). Se align=false, usados sozinhos.
+  // Recrutadores tech / TA (cada item pode ser prefixado com o termo de vagas em rotação)
   recruiterSearchTerms: [
-    'recrutador tech',
     'tech recruiter',
+    'technical recruiter',
+    'recrutador tech',
+    'recrutador de tecnologia',
     'recrutamento ti',
+    'recrutamento de ti',
     'talent acquisition',
+    'talent acquisition specialist',
+    'it recruiter',
+    'engineering recruiter',
+    'headhunter tech',
   ],
+  // Devs com perfil parecido (backend Node/Nest/TS — misturado ao termo de vagas como acima)
+  peerConnectionSearchTerms: [
+    'desenvolvedor backend',
+    'desenvolvedor node.js',
+    'desenvolvedor typescript',
+    'nestjs desenvolvedor',
+    'engenheiro de software backend',
+    'software engineer backend',
+  ],
+  peerSearchAlignWithJobKeywords: true,
+  // true = só convida dev se o card citar token do termo de vaga + stack do config. false = mais convites (recomendado se não clicava).
+  peerMatchCardToJobKeywords: false,
+  // interleave | recruiters_first | peers_first — ordem das buscas ao enviar convites
+  connectionSearchOrder: 'interleave',
   maxConnectionsToRecruiters: 10,
 
   // Modo headless: false = abre o navegador visível (mais seguro)
@@ -135,8 +170,8 @@ export const config = {
 
   // Valores padrão para formulários Easy Apply
   experienceYears: 10,
-  salarySenior: 15000,   // 15k para vagas senior
-  salaryPleno: 10000,   // 10k para vagas pleno
+  salarySenior: 16000,   // 16k para vagas senior
+  salaryPleno: 16000,   // 16k para vagas pleno
   phone: '',            // Celular (ex: 15996715767) - preenche no popup de contato
 
   // Timeout para log de travamento (ms)
