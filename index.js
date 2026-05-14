@@ -618,26 +618,47 @@ async function tryClickConnectInSearchResult(item, page) {
     );
     if (await tryClickBtn(dataCtrl)) return true;
 
-    const role = item.getByRole('button', { name: /^Conectar$|^Connect$/i });
-    if (await tryClickBtn(role)) return true;
+    // PT-BR: o nome acessível é o aria-label inteiro, ex. "Convidar Johnnatan Tomaz para se conectar"
+    const rolePtInvite = item.getByRole('button', { name: /convidar .+ para se conectar/i });
+    if (await tryClickBtn(rolePtInvite)) return true;
 
-    const roleInvite = item.getByRole('button', { name: /invite.*to connect|convidar.*conectar|invitar|connect with/i });
-    if (await tryClickBtn(roleInvite)) return true;
+    const roleEnInvite = item.getByRole('button', { name: /invite .+ to connect/i });
+    if (await tryClickBtn(roleEnInvite)) return true;
 
-    const ariaInvite = item.locator(
-      'button[aria-label*="Invite"][aria-label*="connect" i], button[aria-label*="Convidar"][aria-label*="conectar" i], button[aria-label*="Invite to connect" i], button[aria-label*="Invitar"], button[aria-label*="Conectar"][aria-label*="convite" i]'
+    const roleLoose = item.getByRole('button', {
+      name: /conectar|connect|convidar|invite|connect with/i,
+    });
+    if (await tryClickBtn(roleLoose)) return true;
+
+    const ariaPt = item.locator(
+      'button[aria-label*="Convidar"][aria-label*="para se conectar"], button[aria-label*="Convidar"][aria-label*="se conectar"]'
     );
-    if (await tryClickBtn(ariaInvite)) return true;
+    if (await tryClickBtn(ariaPt)) return true;
 
-    let btn = item.locator('button:has(span.artdeco-button__text:has-text("Conectar"))');
-    if ((await btn.count()) === 0) {
-      btn = item.locator('button:has(span.artdeco-button__text:has-text("Connect"))');
+    const ariaEn = item.locator(
+      'button[aria-label*="Invite"][aria-label*="to connect"], button[aria-label*="Invite to connect"]'
+    );
+    if (await tryClickBtn(ariaEn)) return true;
+
+    // Só o span mostra "Conectar"; o accessible name costuma ser o aria-label longo (PT-BR).
+    const spanConnect = item
+      .locator('span.artdeco-button__text')
+      .filter({ hasText: /\bConectar\b|\bConnect\b/ })
+      .first();
+    if ((await spanConnect.count()) > 0) {
+      const btnUp = spanConnect.locator('xpath=ancestor::button[1]');
+      if (await tryClickBtn(btnUp)) return true;
     }
-    if ((await btn.count()) === 0) {
-      btn = item.locator(
-        'button:has-text("Conectar"), button:has-text("Connect"), button[aria-label*="Conectar"], button[aria-label*="Connect"], button[aria-label*="Convidar"], a[aria-label*="Conectar"]'
-      );
-    }
+
+    const roleShort = item.getByRole('button', { name: /^[\s\n]*Conectar[\s\n]*$|^[\s\n]*Connect[\s\n]*$/i });
+    if (await tryClickBtn(roleShort)) return true;
+
+    const btnSpan = item.locator('button:has(span.artdeco-button__text)').filter({ hasText: /\bConectar\b|\bConnect\b/ });
+    if (await tryClickBtn(btnSpan)) return true;
+
+    btn = item.locator(
+      'button:has-text("Conectar"), button:has-text("Connect"), button[aria-label*="Connect"], button[aria-label*="Conectar"]'
+    );
     if (await tryClickBtn(btn)) return true;
 
     return false;
@@ -1969,6 +1990,40 @@ async function dismissEasyApplyModal(page) {
   await shortDelay();
 }
 
+/**
+ * LinkedIn às vezes deixa um diálogo «Descartar rascunho da candidatura?» por cima da lista —
+ * bloqueia clique no próximo card até ser fechado.
+ */
+async function dismissEasyApplyDiscardConfirmationIfPresent(page) {
+  const modal = page.locator('[data-test-modal-id="data-test-easy-apply-discard-confirmation"]').first();
+  if ((await modal.count().catch(() => 0)) === 0) return;
+  const vis = await modal.isVisible().catch(() => false);
+  if (!vis) return;
+  console.log('   ℹ️ Removendo diálogo de «descartar rascunho» do Easy Apply (bloqueava a lista de vagas)…');
+  const byRole = modal.getByRole('button', { name: /discard|descartar|rascunho|draft|application/i });
+  if ((await byRole.count()) > 0) {
+    const primary = byRole.filter({ hasText: /discard|descartar|yes|sim|ok/i }).first();
+    if ((await primary.count()) > 0 && (await primary.isVisible().catch(() => false))) {
+      await primary.click({ timeout: 6000, force: true }).catch(() => null);
+    } else {
+      await byRole.last().click({ timeout: 6000, force: true }).catch(() => null);
+    }
+    await randomDelay(500, 1200);
+    return;
+  }
+  const loose = modal.locator('button').filter({ hasText: /discard|descartar/i }).first();
+  if ((await loose.count()) > 0 && (await loose.isVisible().catch(() => false))) {
+    await loose.click({ timeout: 6000, force: true }).catch(() => null);
+    await randomDelay(500, 1200);
+    return;
+  }
+  const cancel = modal.getByRole('button', { name: /cancel|cancelar|voltar|keep editing|continuar editando/i }).first();
+  if ((await cancel.count()) > 0) {
+    await cancel.click({ timeout: 6000, force: true }).catch(() => null);
+    await randomDelay(500, 1200);
+  }
+}
+
 async function applyToJob(page) {
   try {
     logFlowStep('EASY APPLY', '1/6 — Lendo título da vaga no painel');
@@ -2429,9 +2484,10 @@ async function run() {
         logFlowStep('CARD', `Posição ${i + 1} — abrindo vaga (id ${idShort})`);
 
         try {
+          await dismissEasyApplyDiscardConfirmationIfPresent(page);
           await card.scrollIntoViewIfNeeded();
           await randomDelay(500, 1500);
-          await card.click();
+          await card.click({ timeout: 25000, force: true });
           await waitForJobDetailContent(page);
           await longDelay();
           logFlowStep('CARD', 'Painel da vaga carregado — checando filtros (stack / senior)');
@@ -2439,7 +2495,28 @@ async function run() {
           if (/not attached|detached/i.test(e?.message || '')) {
             continue; // Card removido do DOM, pula para o próximo
           }
-          throw e;
+          const msg = String(e?.message || e);
+          if (/intercept|Timeout.*click|timeout exceeded/i.test(msg)) {
+            console.log('   ⚠️ Clique no card bloqueado (geralmente modal do LinkedIn) — limpando e tentando de novo…');
+            await dismissEasyApplyDiscardConfirmationIfPresent(page);
+            await dismissEasyApplyModal(page).catch(() => null);
+            await page.keyboard.press('Escape').catch(() => null);
+            await randomDelay(600, 1400);
+            try {
+              await dismissEasyApplyDiscardConfirmationIfPresent(page);
+              await card.scrollIntoViewIfNeeded();
+              await card.click({ timeout: 25000, force: true });
+              await waitForJobDetailContent(page);
+              await longDelay();
+              logFlowStep('CARD', 'Painel da vaga carregado — checando filtros (stack / senior)');
+            } catch (e2) {
+              if (/not attached|detached/i.test(e2?.message || '')) continue;
+              console.log('   ⚠️ Não abriu o card após limpar modais:', String(e2?.message || e2).slice(0, 160));
+              continue;
+            }
+          } else {
+            throw e;
+          }
         }
 
         const jobText = await getAggregatedJobText(page);
